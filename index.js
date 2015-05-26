@@ -68,7 +68,7 @@ var getFoldersConfigPaths = function (basePath, filePath) {
 };
 
 
-var readFileIfExists = function (filePath, placeholders) {
+var readFileIfExists = function (filePath) {
     return new Promise(function (reslove, reject) {
         fs.readFile(filePath, {encoding: 'utf-8'}, function (err, res) {
             if (err) {
@@ -77,7 +77,6 @@ var readFileIfExists = function (filePath, placeholders) {
                 }
                 return reject(err);
             }
-            res = (placeholders) ? _.template(res)(placeholders) : res;
 
             try {
                 res = JSON.parse(res);
@@ -93,15 +92,14 @@ var readFileIfExists = function (filePath, placeholders) {
  * read file and put the Prmise to cache
  *
  * @param {string} filePath - path to file
- * @param {Object} placeholders - object that should be used in template function.
  * @returns {Promise} promise with file content
  */
-var readFile = function (filePath, placeholders) {
+var readFile = function (filePath) {
     if (files[filePath]) {
         return files[filePath];
     }
 
-    files[filePath] = readFileIfExists(filePath, placeholders);
+    files[filePath] = readFileIfExists(filePath);
 
     return files[filePath];
 };
@@ -133,26 +131,16 @@ util.inherits(Magga, EventEmitter);
  * create config for some file and parse configs for it
  *
  * @param {string} pagePath - path to the page
- * @param {Object} placeholders - object with placeholders
  * @param {Function} callback - the result callback
  *
  * @returns {Object} return config
  */
-Magga.prototype.getConfig = function getConfig(pagePath, placeholders, callback) {
+Magga.prototype.getConfig = function getConfig(pagePath, callback) {
     var filePath = this.config.get('getFilePath')(pagePath);
     var configPathes = getFoldersConfigPaths(this.config.get('basePath'), filePath);
 
-    if (_.isFunction(placeholders)) {
-        callback = placeholders;
-        placeholders = null;
-    }
-
-    if (placeholders) {
-        this.emit('placeholders', placeholders);
-    }
-
     Promise.all(configPathes.map(function (configPath) {
-        return readFile(configPath, placeholders);
+        return readFile(configPath);
     })).then(function (results) {
         var result = results.reduce(function (accumulator, currentConfig) {
             this.emit('extend', accumulator, currentConfig);
@@ -164,5 +152,12 @@ Magga.prototype.getConfig = function getConfig(pagePath, placeholders, callback)
     }.bind(this));
 };
 
+
+Magga.prototype.template = function (config, placeholders) {
+    var stringifyConfig = JSON.stringify(config);
+
+    this.emit('placeholders', placeholders);
+    return immutable.fromJS(JSON.parse(_.template(stringifyConfig)(placeholders)));
+};
 
 module.exports = Magga;

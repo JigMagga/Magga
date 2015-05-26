@@ -69,17 +69,6 @@ describe('Magga', function () {
                     done();
                 });
         });
-
-        it('should substitute the placehoders by value if placeholder object exists',
-            function (done) {
-            var config = {foo: "<%= bar %>"};
-            fs.readFile.callsArgWith(2, null, JSON.stringify(config));
-            readFileIfExists('/foo/bar', {bar: 1})
-                .then(function (result) {
-                    expect(result).to.eql({foo: '1'});
-                    done();
-                });
-        });
     });
 
     describe('getFoldersConfigPaths', function () {
@@ -111,61 +100,73 @@ describe('Magga', function () {
         });
     });
 
-    describe('Magga', function () {
-       describe('#getConfig', function () {
-           var magga;
-           var fs = require('fs');
-           beforeEach(function () {
-               Magga.__set__('fs', fs);
-           });
+    describe('#getConfig', function () {
+        var magga;
+        var fs = require('fs');
+        beforeEach(function () {
+            Magga.__set__('fs', fs);
+        });
 
-           it('should get config from one file', function (done) {
+        it('should get config from one file', function (done) {
 
-               magga = new Magga({
-                   basePath: path.join(__dirname, 'fixtures/simple_example')
-               });
+            magga = new Magga({
+                basePath: path.join(__dirname, 'fixtures/simple_example')
+            });
 
-               magga.getConfig('page/page.html', function (err, res) {
-                   var fileContent = fs.readFileSync(path.join(__dirname,
-                       'fixtures/simple_example/page/page.conf'), {encoding: 'utf-8'});
+            magga.getConfig('page/page.html', function (err, res) {
+                var fileContent = fs.readFileSync(path.join(__dirname,
+                    'fixtures/simple_example/page/page.conf'), {encoding: 'utf-8'});
 
-                   expect(err).to.eql(null);
-                   expect(res.toJS()).to.eql(JSON.parse(fileContent));
-                   done();
-               });
-           });
+                expect(err).to.eql(null);
+                expect(res.toJS()).to.eql(JSON.parse(fileContent));
+                done();
+            });
+        });
 
-           it('should get config from two files', function (done) {
-               magga = new Magga({
-                   basePath: path.join(__dirname, 'fixtures/two_configs')
-               });
+        it('should get config from two files', function (done) {
+            magga = new Magga({
+                basePath: path.join(__dirname, 'fixtures/two_configs')
+            });
 
-               magga.getConfig('page/index/index.html', function (err, res) {
-                   var pageContent = fs.readFileSync(path.join(__dirname,
-                       'fixtures/two_configs/page/page.conf'), {encoding: 'utf-8'});
-                   var indexContent = fs.readFileSync(path.join(__dirname,
-                       'fixtures/two_configs/page/index/index.conf'), {encoding: 'utf-8'});
+            magga.getConfig('page/index/index.html', function (err, res) {
+                var pageContent = fs.readFileSync(path.join(__dirname,
+                    'fixtures/two_configs/page/page.conf'), {encoding: 'utf-8'});
+                var indexContent = fs.readFileSync(path.join(__dirname,
+                    'fixtures/two_configs/page/index/index.conf'), {encoding: 'utf-8'});
 
-                   expect(err).to.eql(null);
-                   expect(res.toJS()).to.eql(
-                       _.merge(JSON.parse(indexContent), JSON.parse(pageContent)));
-                   done();
-               });
-           });
-           it('should get config when some files are missing', function (done) {
-               magga = new Magga({
-                   basePath: path.join(__dirname, 'fixtures/without_page_config')
-               });
+                expect(err).to.eql(null);
+                expect(res.toJS()).to.eql(
+                    _.merge(JSON.parse(indexContent), JSON.parse(pageContent)));
+                done();
+            });
+        });
+        it('should get config when some files are missing', function (done) {
+            magga = new Magga({
+                basePath: path.join(__dirname, 'fixtures/without_page_config')
+            });
 
-               magga.getConfig('page/index/index.html', function (err, res) {
-                   var indexContent = fs.readFileSync(path.join(__dirname,
-                       'fixtures/without_page_config/page/index/index.conf'), {encoding: 'utf-8'});
+            magga.getConfig('page/index/index.html', function (err, res) {
+                var indexContent = fs.readFileSync(path.join(__dirname,
+                    'fixtures/without_page_config/page/index/index.conf'), {encoding: 'utf-8'});
 
-                   expect(err).to.eql(null);
-                   expect(res.toJS()).to.eql(JSON.parse(indexContent));
-                   done();
-               });
-           });
-       });
+                expect(err).to.eql(null);
+                expect(res.toJS()).to.eql(JSON.parse(indexContent));
+                done();
+            });
+        });
+
+        it('should replace placeholders', function (done) {
+
+            magga = new Magga({
+                basePath: path.join(__dirname, 'fixtures/with_placeholders')
+            });
+
+            magga.getConfig('page/page.html', function (err, res) {
+                var result = magga.template(res, {restaurantId: 42})
+                expect(err).to.eql(null);
+                expect(result.get('foo').get('apicall')).to.eql('/restaurants/42');
+                done();
+            });
+        });
     });
 });
