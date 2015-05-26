@@ -1,0 +1,30 @@
+{
+    "name": "Magga",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/JigMagga/Magga.git"
+    },
+    "author": "Jhony Chikens <evts85@gmail.com> (https://github.com/jhony-chikens)",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/JigMagga/Magga/issues"
+    },
+    "homepage": "https://github.com/JigMagga/Magga",
+    "devDependencies": {
+        "chai": "^2.3.0",
+        "mocha": "^2.2.4",
+        "rewire": "^2.3.3",
+        "sinon": "^1.14.1"
+    },
+    "dependencies": {
+        "bluebird": "^2.9.25",
+        "immutable": "^3.7.2",
+        "lodash": "^3.8.0"
+    }
+}
