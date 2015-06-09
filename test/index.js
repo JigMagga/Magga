@@ -155,7 +155,7 @@ describe('Magga', function () {
 
                 expect(err).to.eql(null);
                 expect(res.delete('configFilePath').toJS()).to.eql(
-                    _.merge(JSON.parse(indexContent), JSON.parse(pageContent)));
+                    _.merge(JSON.parse(pageContent), JSON.parse(indexContent)));
                 done();
             });
         });

@@ -135,7 +135,7 @@ var getResult = function (promise, cb) {
 function Magga(config) {
     EventEmitter.call(this);
 
-    this.emit('start', config);
+    //this.emit('start', config);
 
     config = config || {};
     config.basePath = config.basePath || __dirname;
@@ -146,7 +146,6 @@ function Magga(config) {
 }
 
 util.inherits(Magga, EventEmitter);
-
 
 
 /**
@@ -166,7 +165,7 @@ Magga.prototype.getConfig = function getConfig(pagePath, callback) {
     }
 
     configCache[filePath] = {};
-    configCache[filePath].promise = Promise.all(configPaths.map(function (configPath) {
+    configCache[filePath].promise = Promise.all(configPaths.reverse().map(function (configPath) {
         return readFileIfExists(configPath);
     })).then(function (results) {
         var result = results.reduce(function (accumulator, currentConfig) {
