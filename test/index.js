@@ -2,70 +2,79 @@
 
 var rewire = require('rewire');
 var path = require('path');
+var sinonPromise = require('sinon-promise');
+
 var _ = require('lodash');
 
 var Magga = rewire('../index');
 
+var _readFile = Magga.__get__('readFile');
+sinonPromise(sinon);
 
 describe('Magga', function () {
     describe('readFileIfExists', function () {
         var fs,
+            readFile,
             readFileIfExists;
 
         beforeEach(function () {
             fs = {
                 readFile: sinon.stub()
             };
+            readFile = sinon.promise();
             Magga.__set__('fs', fs);
+            Magga.__set__('readFile', readFile);
+            Magga.__set__('files', Object.create(null));
+
             readFileIfExists = Magga.__get__('readFileIfExists');
         });
 
 
         it('should read a file if it doesnt exist in cache', function (done) {
             var config = {foo: 1};
-            fs.readFile.callsArgWith(2, null, JSON.stringify(config));
+            readFile.resolves(JSON.stringify(config));
             readFileIfExists('/foo/bar')
                 .then(function (result) {
                     expect(result).to.eql(config);
-                    expect(fs.readFile.called).to.eql(true);
-                    expect(fs.readFile.getCall(0).args[0]).to.eql('/foo/bar');
+                    expect(readFile.called).to.eql(true);
+                    expect(readFile.getCall(0).args[0]).to.eql('/foo/bar');
                     done();
                 });
         });
 
         it('should read the file twice', function (done) {
             var config = {foo: 1};
-            fs.readFile.callsArgWith(2, null, JSON.stringify(config));
+            readFile.resolves(JSON.stringify(config));
             readFileIfExists('/foo/bar')
                 .then(function () {
                     return readFileIfExists('/foo/bar');
                 })
                 .then(function (result) {
                     expect(result).to.eql(config);
-                    expect(fs.readFile.calledTwice).to.eql(true);
+                    expect(readFile.calledOnce).to.eql(true);
                     done();
                 });
         });
 
         it('should return empty object if there is no such file', function (done) {
-            fs.readFile.callsArgWith(2, {code: 'ENOENT'});
+            readFile.rejects({code: 'ENOENT'});
 
             readFileIfExists('/foo/bar')
                 .then(function (result) {
                     expect(result).to.eql({});
-                    expect(fs.readFile.calledOnce).to.eql(true);
+                    expect(readFile.calledOnce).to.eql(true);
                     done();
                 });
         });
 
         it('should return error if JSON is not valid', function (done) {
-            fs.readFile.callsArgWith(2, null, 'not a JSON at all');
+            readFile.resolves('not a JSON at all');
 
             readFileIfExists('/foo/bar')
                 .catch(function (err) {
                     expect(err).to.be.an.instanceof(Error);
                     expect(err.message).to.have.string('/foo/bar');
-                    expect(fs.readFile.calledOnce).to.eql(true);
+                    expect(readFile.calledOnce).to.eql(true);
                     done();
                 });
         });
@@ -74,6 +83,9 @@ describe('Magga', function () {
     describe('getFoldersConfigPaths', function () {
         var getFoldersConfigPaths;
 
+        before(function () {
+            Magga.__set__('readFile', _readFile);
+        });
         beforeEach(function () {
             getFoldersConfigPaths = Magga.__get__('getFoldersConfigPaths');
         });
@@ -105,20 +117,27 @@ describe('Magga', function () {
         var fs = require('fs');
         beforeEach(function () {
             Magga.__set__('fs', fs);
+            Magga.__set__('files', {});
+            Magga.__set__('configCache', {});
         });
 
         it('should get config from one file', function (done) {
+            var pagePath = path.join(__dirname,
+                'fixtures/simple_example/page/page.conf');
 
             magga = new Magga({
                 basePath: path.join(__dirname, 'fixtures/simple_example')
             });
 
             magga.getConfig('page/page.html', function (err, res) {
-                var fileContent = fs.readFileSync(path.join(__dirname,
-                    'fixtures/simple_example/page/page.conf'), {encoding: 'utf-8'});
+                var fileContent = fs.readFileSync(pagePath, {encoding: 'utf-8'});
+                var result = JSON.parse(fileContent);
 
                 expect(err).to.eql(null);
-                expect(res.toJS()).to.eql(JSON.parse(fileContent));
+
+                expect(res.get('configFilePath')
+                    .replace('.html', '.conf')).to.eql(pagePath);
+                expect(res.delete('configFilePath').toJS()).to.eql(result);
                 done();
             });
         });
@@ -135,7 +154,7 @@ describe('Magga', function () {
                     'fixtures/two_configs/page/index/index.conf'), {encoding: 'utf-8'});
 
                 expect(err).to.eql(null);
-                expect(res.toJS()).to.eql(
+                expect(res.delete('configFilePath').toJS()).to.eql(
                     _.merge(JSON.parse(indexContent), JSON.parse(pageContent)));
                 done();
             });
@@ -150,7 +169,7 @@ describe('Magga', function () {
                     'fixtures/without_page_config/page/index/index.conf'), {encoding: 'utf-8'});
 
                 expect(err).to.eql(null);
-                expect(res.toJS()).to.eql(JSON.parse(indexContent));
+                expect(res.delete('configFilePath').toJS()).to.eql(JSON.parse(indexContent));
                 done();
             });
         });
@@ -162,7 +181,7 @@ describe('Magga', function () {
             });
 
             magga.getConfig('page/page.html', function (err, res) {
-                var result = magga.template(res, {restaurantId: 42})
+                var result = magga.template(res, {restaurantId: 42});
                 expect(err).to.eql(null);
                 expect(result.get('foo').get('apicall')).to.eql('/restaurants/42');
                 done();

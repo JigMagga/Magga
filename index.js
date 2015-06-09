@@ -9,8 +9,10 @@ var immutable = require('immutable'),
     _ = require('lodash');
 
 
-var files = {};
+var files = Object.create(null),
+    configCache = Object.create(null);
 
+var readFile = Promise.promisify(fs.readFile);
 
 /**
  * @name MaggaConfig
@@ -34,6 +36,10 @@ var files = {};
  */
 var getFilePath = function (config, pagePath) {
     return path.join(config.basePath, pagePath);
+};
+
+var isPathAbsolute = function (filePath) {
+    return /^(?:\/|[a-z]+:\/\/)/.test(filePath);
 };
 
 /**
@@ -67,41 +73,56 @@ var getFoldersConfigPaths = function (basePath, filePath) {
     return loop([], fileFolderPath);
 };
 
-
-var readFileIfExists = function (filePath) {
-    return new Promise(function (reslove, reject) {
-        fs.readFile(filePath, {encoding: 'utf-8'}, function (err, res) {
-            if (err) {
-                if (err.code === 'ENOENT') {
-                    return reslove({});
-                }
-                return reject(err);
-            }
-
-            try {
-                res = JSON.parse(res);
-            } catch (e) {
-                reject(new Error('config ' + filePath + ' is not a JSON'));
-            }
-            reslove(res);
-        });
-    });
-};
-
 /**
- * read file and put the Prmise to cache
+ * read file and put the Promise to cache
  *
  * @param {string} filePath - path to file
  * @returns {Promise} promise with file content
  */
-var readFile = function (filePath) {
+var readCachedFile = function (filePath) {
     if (files[filePath]) {
         return files[filePath];
     }
 
-    files[filePath] = readFileIfExists(filePath);
+    files[filePath] = readFile(filePath, {encoding: 'utf-8'});
 
     return files[filePath];
+};
+
+
+var readFileIfExists = function (filePath) {
+    return new Promise(function (reslove, reject) {
+        readCachedFile(filePath)
+            .then(function (res) {
+                try {
+                    res = JSON.parse(res);
+                } catch (e) {
+                    reject(new Error('config ' + filePath + ' is not a JSON'));
+                }
+                reslove(res);
+            }, function (err) {
+                if (err.code === 'ENOENT') {
+                    return reslove({});
+                }
+                return reject(err);
+
+            });
+    });
+};
+
+
+
+var getResult = function (promise, cb) {
+    if (!cb) {
+        return promise;
+    }
+
+    promise
+        .then(function (result) {
+            cb(null, result);
+        }, function (err) {
+            cb(err);
+        });
 };
 
 
@@ -127,6 +148,7 @@ function Magga(config) {
 util.inherits(Magga, EventEmitter);
 
 
+
 /**
  * create config for some file and parse configs for it
  *
@@ -137,27 +159,57 @@ util.inherits(Magga, EventEmitter);
  */
 Magga.prototype.getConfig = function getConfig(pagePath, callback) {
     var filePath = this.config.get('getFilePath')(pagePath);
-    var configPathes = getFoldersConfigPaths(this.config.get('basePath'), filePath);
+    var configPaths = getFoldersConfigPaths(this.config.get('basePath'), filePath);
 
-    Promise.all(configPathes.map(function (configPath) {
-        return readFile(configPath);
+    if (configCache[filePath]) {
+        return getResult(configCache[filePath].promise, callback);
+    }
+
+    configCache[filePath] = {};
+    configCache[filePath].promise = Promise.all(configPaths.map(function (configPath) {
+        return readFileIfExists(configPath);
     })).then(function (results) {
         var result = results.reduce(function (accumulator, currentConfig) {
             this.emit('extend', accumulator, currentConfig);
             return _.merge(accumulator, currentConfig);
         }.bind(this), {});
 
+        result.configFilePath = filePath;
         this.emit('done', result);
-        callback(null, immutable.fromJS(result));
+        return immutable.fromJS(result);
     }.bind(this));
+
+    return getResult(configCache[filePath].promise, callback);
 };
 
-
+/**
+ *
+ * @param {Object} config
+ * @param {Object} placeholders
+ * @returns {any}
+ */
 Magga.prototype.template = function (config, placeholders) {
-    var stringifyConfig = JSON.stringify(config);
+    var filePath = config.get('configFilePath');
+    var stringifyConfig;
 
+    if (configCache[filePath] && configCache[filePath].template) {
+        return immutable.fromJS(JSON.parse(configCache[filePath].template(placeholders)));
+    }
+
+    stringifyConfig = JSON.stringify(config);
+    configCache[filePath].template = _.template(stringifyConfig);
     this.emit('placeholders', placeholders);
-    return immutable.fromJS(JSON.parse(_.template(stringifyConfig)(placeholders)));
+
+    return immutable.fromJS(JSON.parse(configCache[filePath].template(placeholders)));
 };
+
+/**
+ *
+ * @param {String} pagePath - path to the main template
+ * @param {Object} data - object with predefined data that should be bootstraped to the page
+ * @param {Function} callback - cb function
+ * @returns {any} nothing to return
+ */
+Magga.prototype.render = function (pagePath, data, callback) {};
 
 module.exports = Magga;
