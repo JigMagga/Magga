@@ -188,4 +188,17 @@ describe('Magga', function () {
             });
         });
     });
+
+    describe('#createFactory', function(){
+        var magga;
+
+        it('should create a instance for every jig in config file', function(){
+           magga = new Magga({
+               basePath: path.join(__dirname, 'fixtures/simple_example')
+           });
+            var configPath = path.join(__dirname, 'fixtures/create_factory/page/jigs.conf');
+            var maggaApp = magga.createFactory(configPath);
+            magga.render(maggaApp, function(){});
+        });
+    });
 });
