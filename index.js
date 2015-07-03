@@ -276,5 +276,6 @@ Magga.prototype.render = function(maggaApp, fn){
             new Jig(config.jigs[jigName].defaults);
         }
     });
+    fn()
 };
 module.exports = Magga;

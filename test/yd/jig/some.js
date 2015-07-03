@@ -3,6 +3,6 @@
  */
 function Some(defaults){
     this.defaults = defaults;
-    // console.log("Instance of jig/Some created with defaults: ", defaults);
+    console.log("Instance of jig/Some created with defaults: ", defaults);
 }
 module.exports = Some;
