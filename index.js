@@ -142,11 +142,44 @@ function Magga(config) {
     config.getFilePath = config.getFilePath || getFilePath;
     config.getFilePath = config.getFilePath.bind(null, config);
 
-    this.config = immutable.fromJS(config || {});
+    this._config = immutable.fromJS(config || {});
 }
 
 util.inherits(Magga, EventEmitter);
 
+/**
+ *
+ * Merges extension with private variable _config in magga object and singleton
+ *
+ * @param {Object|undefined} extension - updates _config
+ * @returns {any} void function
+ */
+
+Magga.prototype.config = function(extension){
+    if (this.singleton){
+        this.singleton._config = (this.singleton._config).merge(extension);
+    }
+    this._config =  (this._config).merge(extension);
+};
+
+/**
+ * creates instance of Magga if non existent, and returns it
+ *
+ * @param {Object|undefined} extension - ext. for _config
+ * @returns {Object} singleton - instance of magga
+ */
+
+Magga.prototype.getInstance = function(extension) {
+    // extend _config, if extension given
+    if (extension){
+        this.config(extension);
+    }
+    // return instance of magga if exists, create it also if not.
+    if (!this.singleton){
+        this.singleton = new Magga(this._config);
+    }
+    return this.singleton;
+};
 
 /**
  * create config for some file and parse configs for it
@@ -157,8 +190,8 @@ util.inherits(Magga, EventEmitter);
  * @returns {Object} return config
  */
 Magga.prototype.getConfig = function getConfig(pagePath, callback) {
-    var filePath = this.config.get('getFilePath')(pagePath);
-    var configPaths = getFoldersConfigPaths(this.config.get('basePath'), filePath);
+    var filePath = this._config.get('getFilePath')(pagePath);
+    var configPaths = getFoldersConfigPaths(this._config.get('basePath'), filePath);
 
     if (configCache[filePath]) {
         return getResult(configCache[filePath].promise, callback);
@@ -202,11 +235,12 @@ Magga.prototype.template = function (config, placeholders) {
     return immutable.fromJS(JSON.parse(configCache[filePath].template(placeholders)));
 };
 /**
+ * CreateFactory requires a config file, parses the jig's names, and returns a function maggaApp,
+ * that will require every /yg/jig/jigName when called in Magga.render()
  *
  * @param {String} configPath - path to the config file
  * @returns {function} maggaApp - will require all files when passed into Magga.render(maggaApp, fn)
- * CreateFactory requires a config file, parses the jig's names, and returns a function maggaApp,
- * that will require every /yg/jig/jigName when called in Magga.render()
+ *
  */
 Magga.prototype.createFactory = function(configPath){
 
@@ -237,7 +271,7 @@ Magga.prototype.createFactory = function(configPath){
     };
     return maggaApp;
 };
-
+// TODO: should render function have the possibility to enter extra data?
 /**
  *
  * @param {String} pagePath - path to the main template

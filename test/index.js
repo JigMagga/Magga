@@ -190,15 +190,29 @@ describe('Magga', function () {
     });
 
     describe('#createFactory', function(){
-        var magga;
+        var magga = new Magga({
+            basePath: path.join(__dirname, 'fixtures/simple_example')
+        });
 
         it('should create a instance for every jig in config file', function(){
-           magga = new Magga({
-               basePath: path.join(__dirname, 'fixtures/simple_example')
-           });
+
             var configPath = path.join(__dirname, 'fixtures/create_factory/page/jigs.conf');
             var maggaApp = magga.createFactory(configPath);
             magga.render(maggaApp, function(){});
+        });
+        it('should be able to use magga as singleton', function(){
+
+            var instance1 = magga.getInstance({x:1});
+            var instance2 = magga.getInstance();
+            expect(instance1).to.eql(instance2);
+        });
+        it('should extend _config and update instance without creating a new one', function(){
+
+            var instance1 = magga.getInstance({x:1});
+            var instance2 = magga.getInstance({y:2});
+            expect(instance1).to.eql(instance2);
+            var instance3 = magga.getInstance();
+            expect(instance2).to.eql(instance3);
         });
     });
 });
