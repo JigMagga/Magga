@@ -201,6 +201,42 @@ Magga.prototype.template = function (config, placeholders) {
 
     return immutable.fromJS(JSON.parse(configCache[filePath].template(placeholders)));
 };
+/**
+ *
+ * @param {String} configPath - path to the config file
+ * @returns {function} maggaApp - will require all files when passed into Magga.render(maggaApp, fn)
+ * CreateFactory requires a config file, parses the jig's names, and returns a function maggaApp,
+ * that will require every /yg/jig/jigName when called in Magga.render()
+ */
+Magga.prototype.createFactory = function(configPath){
+
+    var maggaApp,
+        startPath = 'test/yd',//delete when testing over.
+        // startPath = 'yd/',
+        config = fs.readFileSync(configPath, {encoding: 'utf-8'}),
+        jigs = JSON.parse(config),
+        jigsKeys = Object.keys(jigs["jigs"]),//has key of every jig: "Yd.Jig.JigName"
+        files2require = [],
+        requiredJigs = {};
+
+    // push jig paths into files2require
+    jigsKeys.map(function(jig){
+        var jigName = jig.replace('Yd', '').replace(/\./g,'/').toLowerCase();
+        files2require.push(path.join(__dirname, startPath, jigName));
+    });
+    // require every jig included in the configFile['jigs']
+    maggaApp = function(){
+        var returnObj = {"config": jigs, "keys": jigsKeys},
+            i = 0;
+        files2require.map(function(path2file){
+            requiredJigs[jigsKeys[i]] = require(path2file);
+            i++;
+        });
+        returnObj["jigs"] = requiredJigs;
+        return returnObj;
+    };
+    return maggaApp;
+};
 
 /**
  *
@@ -208,7 +244,38 @@ Magga.prototype.template = function (config, placeholders) {
  * @param {Object} data - object with predefined data that should be bootstraped to the page
  * @param {Function} callback - cb function
  * @returns {any} nothing to return
- */
-Magga.prototype.render = function (pagePath, data, callback) {};
 
+Magga.prototype.render = function (pagePath, data, callback) {};
+ */
+/**
+ *
+ * @param {function} maggaApp - requires files needed to create instances of jigs
+ * @param {function} fn       - ?
+ * @returns {any}    nothing to return
+ */
+
+Magga.prototype.render = function(maggaApp, fn){
+    // load all files
+    var configInfo   = maggaApp(),
+        config = configInfo["config"],
+        keys   = configInfo["keys"],
+        jigs   = configInfo["jigs"],
+        Jig;
+
+    keys.map(function(jigName){
+        // Create multiple instances of jigName
+        if (config.jigs[jigName] instanceof Array){
+            config.jigs[jigName].map(function(defaults){
+                Jig = jigs[jigName];
+                new Jig(defaults);
+
+            });
+        // Create only one instance of jigName
+        } else{
+            Jig = jigs[jigName];
+            new Jig(config.jigs[jigName].defaults);
+        }
+    });
+    fn()
+};
 module.exports = Magga;
