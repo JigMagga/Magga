@@ -26,6 +26,11 @@
     "dependencies": {
         "bluebird": "^2.9.25",
         "immutable": "^3.7.2",
-        "lodash": "^3.8.0"
+        "lodash": "^3.8.0",
+        "browserify": "^10.2.4",
+        "gulp": "^3.9.0",
+        "vinyl-source-stream": "^1.1.0",
+        "gulp-rename": "^1.2.2",
+        "event-stream": "^3.3.1"
     }
 }
