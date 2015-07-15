@@ -202,16 +202,16 @@ describe('Magga', function () {
         });
         it('should be able to use magga as singleton', function(){
 
-            var instance1 = magga.getInstance({x:1});
-            var instance2 = magga.getInstance();
+            var instance1 = Magga.getInstance({x:1});
+            var instance2 = Magga.getInstance();
             expect(instance1).to.eql(instance2);
         });
         it('should extend _config and update instance without creating a new one', function(){
 
-            var instance1 = magga.getInstance({x:1});
-            var instance2 = magga.getInstance({y:2});
+            var instance1 = Magga.getInstance({x:1});
+            var instance2 = Magga.getInstance({y:2});
             expect(instance1).to.eql(instance2);
-            var instance3 = magga.getInstance();
+            var instance3 = Magga.getInstance();
             expect(instance2).to.eql(instance3);
         });
     });

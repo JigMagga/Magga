@@ -12,7 +12,7 @@ var immutable = require('immutable'),
 var files = Object.create(null),
     configCache = Object.create(null);
 
-var readFile = Promise.promisify(fs.readFile);
+//var readFile = Promise.promisify(fs.readFile);
 
 /**
  * @name MaggaConfig
@@ -145,7 +145,34 @@ function Magga(config) {
     this._config = immutable.fromJS(config || {});
 }
 
+/**
+ * Use EventEmitter
+ */
 util.inherits(Magga, EventEmitter);
+
+
+/**
+ * creates instance of Magga if non existent, and returns it
+ *
+ * @param {Object|undefined} extension - ext. for _config
+ * @returns {Object} singleton - instance of magga
+ */
+
+Magga.getInstance = function(extension) {
+
+    // return instance of magga if exists, create it also if not.
+    if (!this.singleton){
+        this.singleton = new Magga(this._config);
+    }
+
+    // extend _config, if extension given
+    if (extension){
+        this.singleton.config(extension);
+    }
+
+    return this.singleton;
+};
+
 
 /**
  *
@@ -162,24 +189,6 @@ Magga.prototype.config = function(extension){
     this._config =  (this._config).merge(extension);
 };
 
-/**
- * creates instance of Magga if non existent, and returns it
- *
- * @param {Object|undefined} extension - ext. for _config
- * @returns {Object} singleton - instance of magga
- */
-
-Magga.prototype.getInstance = function(extension) {
-    // extend _config, if extension given
-    if (extension){
-        this.config(extension);
-    }
-    // return instance of magga if exists, create it also if not.
-    if (!this.singleton){
-        this.singleton = new Magga(this._config);
-    }
-    return this.singleton;
-};
 
 /**
  * create config for some file and parse configs for it
@@ -238,34 +247,38 @@ Magga.prototype.template = function (config, placeholders) {
  * CreateFactory requires a config file, parses the jig's names, and returns a function maggaApp,
  * that will require every /yg/jig/jigName when called in Magga.render()
  *
- * @param {String} configPath - path to the config file
+ * @param {String|Object} config - configuration as path or object
  * @returns {function} maggaApp - will require all files when passed into Magga.render(maggaApp, fn)
  *
  */
-Magga.prototype.createFactory = function(configPath){
+Magga.prototype.createFactory = function(config){
 
     var maggaApp,
-        startPath = 'test/yd',//delete when testing over.
-        // startPath = 'yd/',
-        config = fs.readFileSync(configPath, {encoding: 'utf-8'}),
-        jigs = JSON.parse(config),
-        jigsKeys = Object.keys(jigs["jigs"]),//has key of every jig: "Yd.Jig.JigName"
-        files2require = [],
-        requiredJigs = {};
+        config = typeof config === 'object'? config : JSON.parse(fs.readFileSync(config, {encoding: 'utf-8'})),
+        jigs = Object.keys(config.jigs),
+        requiredJigs = {},
+        i,len;
 
-    // push jig paths into files2require
-    jigsKeys.map(function(jig){
-        var jigName = jig.replace('Yd', '').replace(/\./g,'/').toLowerCase();
-        files2require.push(path.join(__dirname, startPath, jigName));
-    });
+
+
+    for(i = 0, len = jigs.length; i < len; i++){
+        requiredJigs[jigs[i]] = require(jigs[i].replace(".", "/").replace(/\/(.*)$/, "/$1/$1.js").toLowerCase());
+    }
+
+
+    //// push jig paths into files2require
+    //jigsKeys.map(function(jig){
+    //    var jigName = jig.replace('Yd', '').replace(/\./g,'/').toLowerCase();
+    //    files2require.push(path.join(__dirname, startPath, jigName));
+    //});
     // require every jig included in the configFile['jigs']
     maggaApp = function(){
-        var returnObj = {"config": jigs, "keys": jigsKeys},
-            i = 0;
-        files2require.map(function(path2file){
-            requiredJigs[jigsKeys[i]] = require(path2file);
-            i++;
-        });
+        var returnObj = {"config": config, "keys": jigs};
+        //    i = 0;
+        //files2require.map(function(path2file){
+        //    requiredJigs[jigsKeys[i]] = require(path2file);
+        //    i++;
+        //});
         returnObj["jigs"] = requiredJigs;
         return returnObj;
     };
@@ -284,11 +297,11 @@ Magga.prototype.render = function (pagePath, data, callback) {};
 /**
  *
  * @param {function} maggaApp - requires files needed to create instances of jigs
- * @param {function} fn       - ?
+ * @param {function} fn       - callback when async task is done
  * @returns {any}    nothing to return
  */
 
-Magga.prototype.render = function(maggaApp, fn){
+Magga.prototype.render = function(maggaApp, callback){
     // load all files
     var configInfo   = maggaApp(),
         config = configInfo["config"],
@@ -310,6 +323,10 @@ Magga.prototype.render = function(maggaApp, fn){
             new Jig(config.jigs[jigName].defaults);
         }
     });
-    fn()
+   if(typeof callback === "function"){
+       callback();
+   }
 };
+
+
 module.exports = Magga;
