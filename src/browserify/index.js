@@ -11,18 +11,18 @@ var Magga = require("../../"),
  */
 Magga.prototype.browserifyConfTransform = function () {
     var self = this,
-        data;
+        data,
+        extension = self.config().get("extension");
     return function (file) {
         data = '';
-        // TODO ".conf" should be configurable via Magga.config();
-        if (file && file.indexOf(".conf") !== -1) {
+        if (file && file.indexOf(extension) !== -1) {
             function write(buf) {
                 data += buf
             }
 
             function end() {
                 //this.queue('module.exports = ' + data);
-                this.queue(self.createBundle(JSON.parse(data)));
+                this.queue(self.transformConfIntoJS(JSON.parse(data)));
                 this.queue(null);
             }
 
@@ -33,13 +33,14 @@ Magga.prototype.browserifyConfTransform = function () {
     };
 };
 
+
 /**
  *
  * @param conf
  * @param browserifyInstance
  * @returns {string}
  */
-Magga.prototype.createBundle = function (conf) {
+Magga.prototype.transformConfIntoJS = function (conf) {
     var i,
         len,
         keys = Object.keys(conf.jigs),
@@ -53,17 +54,63 @@ Magga.prototype.createBundle = function (conf) {
 
 
 /**
+ * creates js bundle with the jigs in configPath using browserify.
+ *
+ * @param {String} configPath
+ * @param {Function} cb - cb(bundleString)
+ */
+Magga.prototype.createBundle = function (configPath, cb) {
+    // TODO: magga.getPageConfig
+    this.pageConfig = configPath;
+
+
+    // read jigs from file within configPath
+    var startPath = 'test/yd',//delete when testing over.
+    // startPath = 'yd/',
+        config = fs.readFileSync(configPath, {encoding: 'utf-8'}),
+        jigs = JSON.parse(config),
+        jigsKeys = Object.keys(jigs["jigs"]),//has key of every jig: "Yd.Jig.JigName"
+        jigPath,
+        jigsToBeBundled = [];
+
+    // adds jig path to bundle
+    jigsKeys.map(function (jig) {
+        // parse jig name out of config file. /Yd/Jigname -> Jigname
+        var jigName = jig.replace(/\.|Yd/g, '/').toLowerCase();
+        jigPath = path.join(__dirname, startPath, jigName + '.js');
+        jigsToBeBundled.push(jigPath);
+    });
+
+
+    browserify.add(jigsToBeBundled);
+    var writer = fs.createWriteStream('bundle.js', {encoding: 'utf-8'});
+    browserify.bundle().pipe(writer);
+    writer.on('end', cb);
+};
+
+
+/**
  *
  * @param conf
  * @param browserifyInstance
  * @returns {string}
  */
 Magga.prototype.browserifyPlugin = function (browserify) {
+    var self = this,
+        extension = self.config().get("extension");
     browserify.plugin(pathmodify(), {
         mods: [function (rec) {
-            return {
-                id: rec.id,
-                expose: rec.id
+            // only expose files that are
+            if (rec.opts.filename.indexOf(extension) !== -1) {
+                return {
+                    id: rec.id,
+                    // expose the relative path the the current cwd directory
+                    expose:  rec.id
+                }
+            } else {
+                return {
+                    id: rec.id
+                }
             }
         }]
     });

@@ -1,23 +1,18 @@
 'use strict';
 
-var immutable    = require('immutable'),
+var immutable = require('immutable'),
     EventEmitter = require('events').EventEmitter,
-    util         = require('util'),
-    path         = require('path'),
-    fs           = require('fs'),
-    Promise      = require('bluebird'),
-    _            = require('lodash'),
-    b            = require('browserify'),
-    browserify   = b(),
-    gulp         = require('gulp'),
-    source       = require('vinyl-source-stream'),
-    rename       = require('gulp-rename'),
-    es           = require('event-stream');
+    util = require('util'),
+    path = require('path'),
+    fs = require('fs'),
+    Promise = require('bluebird'),
+    _ = require('lodash');
 
 
 var files = Object.create(null),
     configCache = Object.create(null);
 
+// Will not work in the browser
 //var readFile = Promise.promisify(fs.readFile);
 
 
@@ -118,7 +113,6 @@ var readFileIfExists = function (filePath) {
 };
 
 
-
 var getResult = function (promise, cb) {
     if (!cb) {
         return promise;
@@ -145,6 +139,9 @@ function Magga(config) {
     //this.emit('start', config);
 
     config = config || {};
+    config.cwd = path.resolve(config.cwd || process.cwd())
+    // extention for configuration files
+    config.extension = config.extension || ".conf";
     config.basePath = config.basePath || __dirname;
     config.getFilePath = config.getFilePath || getFilePath;
     config.getFilePath = config.getFilePath.bind(null, config);
@@ -165,15 +162,15 @@ util.inherits(Magga, EventEmitter);
  * @returns {Object} singleton - instance of magga
  */
 
-Magga.getInstance = function(extension) {
+Magga.getInstance = function (extension) {
 
     // return instance of magga if exists, create it also if not.
-    if (!this.singleton){
+    if (!this.singleton) {
         this.singleton = new Magga(this._config);
     }
 
     // extend _config, if extension given
-    if (extension){
+    if (extension) {
         this.singleton.config(extension);
     }
 
@@ -189,11 +186,11 @@ Magga.getInstance = function(extension) {
  * @returns {any} void function
  */
 
-Magga.prototype.config = function(extension){
-    if (this.singleton){
-        this.singleton._config = (this.singleton._config).merge(extension);
+Magga.prototype.config = function (extension) {
+    if (!extension) {
+        return this._config;
     }
-    this._config =  (this._config).merge(extension);
+    return this._config = this._config.merge(extension);
 };
 
 
@@ -258,17 +255,16 @@ Magga.prototype.template = function (config, placeholders) {
  * @returns {function} maggaApp - will require all files when passed into Magga.render(maggaApp, fn)
  *
  */
-Magga.prototype.createFactory = function(config){
+Magga.prototype.createFactory = function (config) {
 
     var maggaApp,
-        config = typeof config === 'object'? config : JSON.parse(fs.readFileSync(config, {encoding: 'utf-8'})),
+        config = typeof config === 'object' ? config : JSON.parse(fs.readFileSync(config, {encoding: 'utf-8'})),
         jigs = Object.keys(config.jigs),
         requiredJigs = {},
-        i,len;
+        i, len;
 
 
-
-    for(i = 0, len = jigs.length; i < len; i++){
+    for (i = 0, len = jigs.length; i < len; i++) {
         requiredJigs[jigs[i]] = require(jigs[i].replace(".", "/").replace(/\/(.*)$/, "/$1/$1.js").toLowerCase());
     }
 
@@ -279,7 +275,7 @@ Magga.prototype.createFactory = function(config){
     //    files2require.push(path.join(__dirname, startPath, jigName));
     //});
     // require every jig included in the configFile['jigs']
-    maggaApp = function(){
+    maggaApp = function () {
         var returnObj = {"config": config, "keys": jigs};
         //    i = 0;
         //files2require.map(function(path2file){
@@ -299,7 +295,7 @@ Magga.prototype.createFactory = function(config){
  * @param {Function} callback - cb function
  * @returns {any} nothing to return
 
-Magga.prototype.render = function (pagePath, data, callback) {};
+ Magga.prototype.render = function (pagePath, data, callback) {};
  */
 /**
  * creates an instance of every jig
@@ -309,69 +305,33 @@ Magga.prototype.render = function (pagePath, data, callback) {};
  * @returns {any}    nothing to return
  */
 
-Magga.prototype.render = function(maggaApp, callback){
+Magga.prototype.render = function (maggaApp, callback) {
     // load all files
-    var configInfo   = maggaApp(),
+    var configInfo = maggaApp(),
         config = configInfo["config"], // container for jig's default objects
-        keys   = configInfo["keys"], // jigName to call constructor
-        jigs   = configInfo["jigs"], // jig constructor
+        keys = configInfo["keys"], // jigName to call constructor
+        jigs = configInfo["jigs"], // jig constructor
         Jig;
 
-    keys.map(function(jigName){
+    keys.map(function (jigName) {
         // Create multiple instances of jigName
-        if (config.jigs[jigName] instanceof Array){
-            config.jigs[jigName].map(function(defaults){
+        if (config.jigs[jigName] instanceof Array) {
+            config.jigs[jigName].map(function (defaults) {
                 Jig = jigs[jigName];
                 new Jig(defaults);
 
             });
-        // Create only one instance of jigName
-        } else{
+            // Create only one instance of jigName
+        } else {
             Jig = jigs[jigName];
             new Jig(config.jigs[jigName].defaults);
         }
     });
-   if(typeof callback === "function"){
-       callback();
-   }
+    if (typeof callback === "function") {
+        callback();
+    }
 };
 
-
-/**
- * creates js bundle with the jigs in configPath using browserify.
- *
- * @param {String} configPath
- * @param {Function} cb - cb(bundleString)
- */
-Magga.prototype.createBundle = function(configPath, cb){
-    // TODO: magga.getPageConfig
-        this.pageConfig = configPath;
-
-
-
-    // read jigs from file within configPath
-    var startPath = 'test/yd',//delete when testing over.
-        // startPath = 'yd/',
-        config = fs.readFileSync(configPath, {encoding: 'utf-8'}),
-        jigs = JSON.parse(config),
-        jigsKeys = Object.keys(jigs["jigs"]),//has key of every jig: "Yd.Jig.JigName"
-        jigPath,
-        jigsToBeBundled = [];
-
-    // adds jig path to bundle
-    jigsKeys.map(function(jig){
-        // parse jig name out of config file. /Yd/Jigname -> Jigname
-        var jigName = jig.replace(/\.|Yd/g,'/').toLowerCase();
-        jigPath = path.join(__dirname, startPath, jigName + '.js');
-        jigsToBeBundled.push(jigPath);
-    });
-
-
-    browserify.add(jigsToBeBundled);
-    var writer = fs.createWriteStream('bundle.js', {encoding: 'utf-8'});
-    browserify.bundle().pipe(writer);
-    writer.on('end', cb);
-};
 
 /**
  * Returns the pageConfig from which the bundle is created.
@@ -379,7 +339,7 @@ Magga.prototype.createBundle = function(configPath, cb){
  * @returns {String|*}
  * TODO: TO BE COMPLETED AND TESTED
  */
-Magga.prototype.getPageConfig = function(){
+Magga.prototype.getPageConfig = function () {
     return this.pageConfig;
 };
 module.exports = Magga;

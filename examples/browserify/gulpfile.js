@@ -9,10 +9,12 @@ gulp.task('webserver', function () {
             return [
                 function (req, res, next) {
                     if (req.url && req.url.indexOf(".js") !== -1) {
-                        var browserify = Browserify({debug: true});
-                        Magga.getInstance().browserifyPlugin(browserify);
+                        var magga = Magga.getInstance(),
+                            browserify = Browserify({debug: true});
+
+                        magga.browserifyPlugin(browserify);
                         browserify
-                            .transform(Magga.getInstance().browserifyConfTransform())
+                            .transform(magga.browserifyConfTransform())
                             .add(__dirname + req.url)
                             .bundle().pipe(res);
 
