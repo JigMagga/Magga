@@ -307,23 +307,28 @@ Magga.prototype.createFactory = function (config) {
 
 Magga.prototype.render = function (maggaApp, callback) {
     // load all files
-    var configInfo = maggaApp(),
+    var self = this,
+        configInfo = maggaApp(),
         config = configInfo["config"], // container for jig's default objects
         keys = configInfo["keys"], // jigName to call constructor
         jigs = configInfo["jigs"], // jig constructor
         Jig;
+
+    self.pageConfig = config;
 
     keys.map(function (jigName) {
         // Create multiple instances of jigName
         if (config.jigs[jigName] instanceof Array) {
             config.jigs[jigName].map(function (defaults) {
                 Jig = jigs[jigName];
+                defaults.Magga = self;
                 new Jig(defaults);
 
             });
             // Create only one instance of jigName
         } else {
             Jig = jigs[jigName];
+            config.jigs[jigName].defaults.Magga = self;
             new Jig(config.jigs[jigName].defaults);
         }
     });
