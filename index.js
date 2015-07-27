@@ -347,5 +347,11 @@ Magga.prototype.render = function (maggaApp, callback) {
 Magga.prototype.getPageConfig = function () {
     return this.pageConfig;
 };
+
+Magga.prototype.start = function () {
+    console.log('START');
+};
+
+
 module.exports = Magga;
 
