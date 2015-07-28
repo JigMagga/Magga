@@ -337,6 +337,63 @@ Magga.prototype.render = function (maggaApp, callback) {
     }
 };
 
+/**
+ * Allows to initiate application with MaggaMediator
+  * @param {function} maggaApp - a factory of Magga
+ * @param {function} mediator  - constructor of MaggaMediator
+ * @param {function} callback - callback for further actions. sends instance of mediator as first argument
+ * @returns {any}    nothing to return
+ */
+
+Magga.prototype.initWithMediator = function (maggaApp, mediator, callback) {
+    // load all files
+    var self = this,
+        configInfo = maggaApp(),
+        config = configInfo["config"], // container for jig's default objects
+        keys = configInfo["keys"], // jigName to call constructor
+        jigs = configInfo["jigs"], // jig constructor
+        Jig;
+
+    self.pageConfig = config;
+    self.m = new mediator();
+
+
+    keys.map(function (jigName) {
+        // Create multiple instances of jigName
+        if (config.jigs[jigName] instanceof Array) {
+            config.jigs[jigName].map(function (defaults) {
+                Jig = jigs[jigName];
+                defaults.Magga = self;
+            });
+            // Create only one instance of jigName
+        } else {
+            Jig = jigs[jigName];
+            config.jigs[jigName].defaults.Magga = self;
+
+        }
+    });
+
+    self.m.subscribe('Commands.createJig', function(data){
+        var Jig = jigs[data.name],
+            jigConfig,
+            jigInstance;
+        if (typeof Jig === 'undefined') {
+            throw Error('createJig: Can\' find jig '+data.name+' in config to create');
+        }
+        jigConfig = config.jigs[data.name];
+        jigConfig.Magga = self;
+        jigInstance = Jig.newInstance(data.defaults);
+
+        if (typeof data.cb === "function") {
+            data.cb.call(jigInstance,self);
+        }
+    });
+
+    if (typeof callback === "function") {
+        callback(self.m);
+    }
+};
+
 
 /**
  * Returns the pageConfig from which the bundle is created.
