@@ -4,16 +4,9 @@ var immutable = require('immutable'),
     EventEmitter = require('events').EventEmitter,
     util = require('util'),
     path = require('path'),
-    fs = require('fs'),
-    Promise = require('bluebird'),
-    _ = require('lodash');
+    fs = require('fs');
 
 
-var files = Object.create(null),
-    configCache = Object.create(null);
-
-// Will not work in the browser
-//var readFile = Promise.promisify(fs.readFile);
 
 
 /**
@@ -31,103 +24,6 @@ var files = Object.create(null),
 
 
 /**
- * default getFilePath function
- * @param {MaggaConfig} config - Magga configuration object
- * @param {String} pagePath - realtive page path
- * @returns {String} returns full file path
- */
-var getFilePath = function (config, pagePath) {
-    return path.join(config.basePath, pagePath);
-};
-
-var isPathAbsolute = function (filePath) {
-    return /^(?:\/|[a-z]+:\/\/)/.test(filePath);
-};
-
-/**
- * returns array with paths to config file
- *
- * @param {String} basePath - base path method should look for configs until it reach this folder
- * @param {String} filePath - path to file for which method should generate the config
- * @returns {Array<String>} list with config file paths
- */
-var getFoldersConfigPaths = function (basePath, filePath) {
-    var removeLastPartFromPath = function (somePath) {
-        var folders = somePath.split('/');
-        folders.pop();
-        return folders.join('/');
-    };
-
-    var loop = function (res, currentFolderPath) {
-        var configFileName;
-        if (basePath === currentFolderPath) {
-            return res;
-        }
-        configFileName = _.first(currentFolderPath.split('/').reverse());
-
-        res.push(path.join(currentFolderPath, configFileName + '.conf'));
-
-        return loop(res, removeLastPartFromPath(currentFolderPath));
-    };
-
-    var fileFolderPath = removeLastPartFromPath(filePath);
-
-    return loop([], fileFolderPath);
-};
-
-/**
- * read file and put the Promise to cache
- *
- * @param {string} filePath - path to file
- * @returns {Promise} promise with file content
- */
-var readCachedFile = function (filePath) {
-    if (files[filePath]) {
-        return files[filePath];
-    }
-
-    files[filePath] = readFile(filePath, {encoding: 'utf-8'});
-
-    return files[filePath];
-};
-
-
-var readFileIfExists = function (filePath) {
-    return new Promise(function (reslove, reject) {
-        readCachedFile(filePath)
-            .then(function (res) {
-                try {
-                    res = JSON.parse(res);
-                } catch (e) {
-                    reject(new Error('config ' + filePath + ' is not a JSON'));
-                }
-                reslove(res);
-            }, function (err) {
-                if (err.code === 'ENOENT') {
-                    return reslove({});
-                }
-                return reject(err);
-
-            });
-    });
-};
-
-
-var getResult = function (promise, cb) {
-    if (!cb) {
-        return promise;
-    }
-
-    promise
-        .then(function (result) {
-            cb(null, result);
-        }, function (err) {
-            cb(err);
-        });
-};
-
-
-/**
  * create instance of magga
  *
  * @param {MaggaConfig} config - incoming config
@@ -136,10 +32,10 @@ var getResult = function (promise, cb) {
 function Magga(config) {
     EventEmitter.call(this);
 
-    //this.emit('start', config);
+    this.emit('start', config);
 
     config = config || {};
-    config.cwd = path.resolve(config.cwd || process.cwd())
+    config.cwd = path.resolve(config.cwd || process.cwd());
     // extention for configuration files
     config.extension = config.extension || ".conf";
     config.basePath = config.basePath || __dirname;
@@ -155,23 +51,29 @@ function Magga(config) {
 util.inherits(Magga, EventEmitter);
 
 
+
+Magga.jigToPath = function (jigName) {
+    return jigName.replace(/\./g, "/").replace(/\/([^/]*)$/, "/$1/$1.js").toLowerCase();
+};
+
+
 /**
  * creates instance of Magga if non existent, and returns it
  *
- * @param {Object|undefined} extension - ext. for _config
- * @returns {Object} singleton - instance of magga
+ * @param {Object|undefined} config - for Magga constructor
+ * @returns {Object} singleton - instance of Magga
  */
 
-Magga.getInstance = function (extension) {
+Magga.getInstance = function (config) {
 
     // return instance of magga if exists, create it also if not.
     if (!this.singleton) {
-        this.singleton = new Magga(this._config);
+        this.singleton = new Magga(config);
     }
 
     // extend _config, if extension given
-    if (extension) {
-        this.singleton.config(extension);
+    if (config && this.singleton) {
+        this.singleton.config(config);
     }
 
     return this.singleton;
@@ -195,98 +97,32 @@ Magga.prototype.config = function (extension) {
 
 
 /**
- * create config for some file and parse configs for it
- *
- * @param {string} pagePath - path to the page
- * @param {Function} callback - the result callback
- *
- * @returns {Object} return config
- */
-Magga.prototype.getConfig = function getConfig(pagePath, callback) {
-    var filePath = this._config.get('getFilePath')(pagePath);
-    var configPaths = getFoldersConfigPaths(this._config.get('basePath'), filePath);
-
-    if (configCache[filePath]) {
-        return getResult(configCache[filePath].promise, callback);
-    }
-
-    configCache[filePath] = {};
-    configCache[filePath].promise = Promise.all(configPaths.reverse().map(function (configPath) {
-        return readFileIfExists(configPath);
-    })).then(function (results) {
-        var result = results.reduce(function (accumulator, currentConfig) {
-            this.emit('extend', accumulator, currentConfig);
-            return _.merge(accumulator, currentConfig);
-        }.bind(this), {});
-
-        result.configFilePath = filePath;
-        this.emit('done', result);
-        return immutable.fromJS(result);
-    }.bind(this));
-
-    return getResult(configCache[filePath].promise, callback);
-};
-
-/**
- *
- * @param {Object} config
- * @param {Object} placeholders
- * @returns {any}
- */
-Magga.prototype.template = function (config, placeholders) {
-    var filePath = config.get('configFilePath');
-    var stringifyConfig;
-
-    if (configCache[filePath] && configCache[filePath].template) {
-        return immutable.fromJS(JSON.parse(configCache[filePath].template(placeholders)));
-    }
-
-    stringifyConfig = JSON.stringify(config);
-    configCache[filePath].template = _.template(stringifyConfig);
-    this.emit('placeholders', placeholders);
-
-    return immutable.fromJS(JSON.parse(configCache[filePath].template(placeholders)));
-};
-/**
  * CreateFactory requires a config file, parses the jig's names, and returns a function maggaApp,
  * that will require every /yg/jig/jigName when called in Magga.render()
  *
- * @param {String|Object} config - configuration as path or object
- * @returns {function} maggaApp - will require all files when passed into Magga.render(maggaApp, fn)
+ * @param {String|Object} pageConfig - configuration as path or object
+ * @returns {function} factory - will require all files when passed into Magga.render(maggaApp, fn)
  *
  */
-Magga.prototype.createFactory = function (config) {
+Magga.prototype.createFactory = function (pageConfig) {
 
-    var maggaApp,
-        config = typeof config === 'object' ? config : JSON.parse(fs.readFileSync(config, {encoding: 'utf-8'})),
+    var config = typeof config === 'object' ? config : JSON.parse(fs.readFileSync(config, {encoding: 'utf-8'})),
         jigs = Object.keys(config.jigs),
         requiredJigs = {},
-        i, len;
-
+        i, len,
+        factory,
+        _Magga = Magga;
 
     for (i = 0, len = jigs.length; i < len; i++) {
-        requiredJigs[jigs[i]] = require(jigs[i].replace(".", "/").replace(/\/(.*)$/, "/$1/$1.js").toLowerCase());
+        requiredJigs[jigs[i]] = require(_Magga.jigToPath(jigs[i]));
     }
 
-
-    //// push jig paths into files2require
-    //jigsKeys.map(function(jig){
-    //    var jigName = jig.replace('Yd', '').replace(/\./g,'/').toLowerCase();
-    //    files2require.push(path.join(__dirname, startPath, jigName));
-    //});
-    // require every jig included in the configFile['jigs']
-    maggaApp = function () {
-        var returnObj = {"config": config, "keys": jigs};
-        //    i = 0;
-        //files2require.map(function(path2file){
-        //    requiredJigs[jigsKeys[i]] = require(path2file);
-        //    i++;
-        //});
-        returnObj["jigs"] = requiredJigs;
-        return returnObj;
+    factory = function () {
+        return {"config": config, "keys": jigs, jigs: requiredJigs};
     };
-    return maggaApp;
+    return factory;
 };
+
 // TODO: should render function have the possibility to enter extra data?
 /**
  *
@@ -300,36 +136,40 @@ Magga.prototype.createFactory = function (config) {
 /**
  * creates an instance of every jig
  *
- * @param {function} maggaApp - requires files needed to create instances of jigs
+ * @param {function} factory - requires files needed to create instances of jigs
  * @param {function} callback       - callback when async task is done
  * @returns {any}    nothing to return
  */
 
-Magga.prototype.render = function (maggaApp, callback) {
-    // load all files
+Magga.prototype.render = function (factory, callback) {
     var self = this,
-        configInfo = maggaApp(),
-        config = configInfo["config"], // container for jig's default objects
-        keys = configInfo["keys"], // jigName to call constructor
-        jigs = configInfo["jigs"], // jig constructor
+        configInfo = factory(),
+        config = configInfo.config, // container for jig's default objects
+        keys = configInfo.keys, // jigName to call constructor
+        jigs = configInfo.jigs, // jig constructor
         Jig;
 
     self.pageConfig = config;
 
     keys.map(function (jigName) {
-        // Create multiple instances of jigName
+        // Create multiple instances of Jig
         if (config.jigs[jigName] instanceof Array) {
             config.jigs[jigName].map(function (defaults) {
                 Jig = jigs[jigName];
-                defaults.Magga = self;
-                new Jig(defaults);
+                if (config.jigs[jigName].init !== false) {
+                    new Jig(defaults);
+                }
+
 
             });
-            // Create only one instance of jigName
-        } else {
+
+        }
+        // Create only one instance of Jig
+        else {
             Jig = jigs[jigName];
-            config.jigs[jigName].defaults.Magga = self;
-            new Jig(config.jigs[jigName].defaults);
+            if (config.jigs[jigName].init !== false) {
+                new Jig(config.jigs[jigName].defaults);
+            }
         }
     });
     if (typeof callback === "function") {
@@ -337,76 +177,97 @@ Magga.prototype.render = function (maggaApp, callback) {
     }
 };
 
-/**
- * Allows to initiate application with MaggaMediator
-  * @param {function} maggaApp - a factory of Magga
- * @param {function} mediator  - constructor of MaggaMediator
- * @param {function} callback - callback for further actions. sends instance of mediator as first argument
- * @returns {any}    nothing to return
- */
-
-Magga.prototype.initWithMediator = function (maggaApp, mediator, callback) {
-    // load all files
-    var self = this,
-        configInfo = maggaApp(),
-        config = configInfo["config"], // container for jig's default objects
-        keys = configInfo["keys"], // jigName to call constructor
-        jigs = configInfo["jigs"], // jig constructor
-        Jig;
-
-    self.pageConfig = config;
-    self.m = new mediator();
-
-
-    keys.map(function (jigName) {
-        // Create multiple instances of jigName
-        if (config.jigs[jigName] instanceof Array) {
-            config.jigs[jigName].map(function (defaults) {
-                Jig = jigs[jigName];
-                defaults.Magga = self;
-            });
-            // Create only one instance of jigName
-        } else {
-            Jig = jigs[jigName];
-            config.jigs[jigName].defaults.Magga = self;
-
-        }
-    });
-
-    self.m.subscribe('Commands.createJig', function(data){
-        var Jig = jigs[data.name],
-            jigConfig,
-            jigInstance;
-        if (typeof Jig === 'undefined') {
-            throw Error('createJig: Can\' find jig '+data.name+' in config to create');
-        }
-        jigConfig = config.jigs[data.name];
-        jigConfig.Magga = self;
-        jigInstance = Jig.newInstance(data.defaults);
-
-        if (typeof data.cb === "function") {
-            data.cb.call(jigInstance,self);
-        }
-    });
-
-    if (typeof callback === "function") {
-        callback(self.m);
-    }
-};
-
 
 /**
  * Returns the pageConfig from which the bundle is created.
- *
  * @returns {String|*}
- * TODO: TO BE COMPLETED AND TESTED
+ *
  */
 Magga.prototype.getPageConfig = function () {
     return this.pageConfig;
 };
 
-Magga.prototype.start = function () {
-    console.log('START');
+
+/**
+ * This will extend the Magga with some functions
+ * You can use a function that will be called with the instance:
+ *
+ * Magga.use(function(MaggaInstance){
+ *
+ *   MaggaInstance.myFn = function(){}
+ *
+ * })
+ *
+ * Or you use an object that will be extend to the root
+ *
+ * Magga.use({ myFn: function(){}})
+ *
+ * Use:
+ *
+ * Magga.myFn();
+ *
+ * @param {object|function} extension
+ */
+Magga.prototype.use = function (extension) {
+    if (typeof extension === "function") {
+        extension(this);
+    } else if (typeof extension === "object") {
+        util._extend(this, extension);
+    } else {
+        throw new Error("Wrong extension. Should be an object or function");
+    }
+};
+
+
+/**
+ * TODO WIP
+ * @param {String} name - jig name eg. Jig
+ * @param {String|Integer} id - specify an identifyer if there are many instances from one jig
+ *
+ * Many instances config eg.:
+ *
+ * jigs: {
+ *
+ *      "Jig.Todo.Button": [{
+ *          id: "smartButton"
+ *          init: false
+ *          defaults: {}
+ *      }, {
+ *          id: "superSmartButton"
+ *          init: false
+ *          defaults: {}
+ *      }]
+ *
+ *
+ *
+ * }
+ *
+ *
+ *
+ */
+Magga.prototype.startJig = function (name, id) {
+    var config = this.getPageConfig(),
+        jigs = Object.keys(config.jigs),
+        i, len;
+
+    if (!name) {
+        throw new Error("StartJig function requires name");
+    }
+
+    for (i = 0, len = jigs.length; i < len; i++) {
+        if (jigs[i] === name) {
+            if (config.jigs[name] instanceof Array) {
+                if(!id){
+                    throw new Error("StartJig function requires id in case of Jig: " + name);
+                }
+                // TODO
+            } else {
+                //config.jigs[name];
+            }
+        }
+    }
+
+
 };
 
 
