@@ -106,7 +106,7 @@ Magga.prototype.config = function (extension) {
  */
 Magga.prototype.createFactory = function (pageConfig) {
 
-    var config = typeof config === 'object' ? config : JSON.parse(fs.readFileSync(config, {encoding: 'utf-8'})),
+    var config = typeof pageConfig === 'object' ? pageConfig : JSON.parse(fs.readFileSync(pageConfig, {encoding: 'utf-8'})),
         jigs = Object.keys(config.jigs),
         requiredJigs = {},
         i, len,
