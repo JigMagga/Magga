@@ -39,8 +39,8 @@ function Magga(config) {
     // extention for configuration files
     config.extension = config.extension || ".conf";
     config.basePath = config.basePath || __dirname;
-    config.getFilePath = config.getFilePath || getFilePath;
-    config.getFilePath = config.getFilePath.bind(null, config);
+    //config.getFilePath = config.getFilePath || getFilePath;
+    //config.getFilePath = config.getFilePath.bind(null, config);
 
     this._config = immutable.fromJS(config || {});
 }
